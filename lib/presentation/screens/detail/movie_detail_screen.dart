@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
-import 'package:isar/isar.dart';
 import 'package:markmymovie/data/models/folder_model.dart';
 import 'package:markmymovie/data/models/movie_model.dart';
 import 'package:markmymovie/data/services/tmdb_service.dart';
@@ -458,7 +457,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen>
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Row(
           children: [
-            if(movie.folderId != 0)
+            if(movie.folderId.isNotEmpty)
             Expanded(
               child: _buildActionButton(
                 icon:
@@ -478,14 +477,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen>
                 },
               ),
             ),
-            if(movie.folderId != 0)
+            if(movie.folderId.isNotEmpty)
             const SizedBox(width: 12),
             Expanded(
               child: _buildActionButton(
-                icon: movie.folderId != 0 ? Icons.bookmark : Icons.bookmark_border,
-                label: movie.folderId != 0 ? 'In Folders' : 'Add to Folder',
+                icon: movie.folderId.isNotEmpty ? Icons.bookmark : Icons.bookmark_border,
+                label: movie.folderId.isNotEmpty ? 'In Folders' : 'Add to Folder',
                 color:
-                movie.folderId != 0
+                movie.folderId.isNotEmpty
                         ? const Color(0xFFFFD600)
                         : const Color(0xFF666666),
                 onPressed: () async{
@@ -862,7 +861,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen>
                             ...List.generate(folders.length,  (index) {
                               print(folders[index].id);
                               bool isExist = false;
-                              if(movie.folderId != 0 && movie.folderId == folders[index].id){
+                              if(movie.folderId.isNotEmpty && movie.folderId == folders[index].id){
                                 isExist = true;
                               } else {
                                 isExist = false;

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/presentation/screens/home/home_screen.dart';
+import 'package:markmymovie/logic/auth_notifier.dart';
+import 'package:markmymovie/presentation/screens/auth/login_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -232,18 +234,25 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _initializeApp() async {
     try {
-      // Initialize your Isar database here
-      // await widget.isarService.initialize();
+      final authNotifier = AuthNotifier();
+      await authNotifier.checkSession();
 
       // Simulate initialization time
       await Future.delayed(const Duration(milliseconds: 1000));
 
       if (mounted) {
+        if (authNotifier.isAuthenticated) {
+          widget.isarService.syncFoldersFromServer();
+        }
+
+        final Widget nextScreen = authNotifier.isAuthenticated
+            ? HomeScreen(isarService: widget.isarService)
+            : LoginScreen(isarService: widget.isarService);
+
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                HomeScreen(isarService: widget.isarService),
+            pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(
                 opacity: animation,

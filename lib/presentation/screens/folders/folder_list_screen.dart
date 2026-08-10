@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:isar/isar.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/data/models/movie_model.dart';
 import 'package:markmymovie/presentation/screens/detail/movie_detail_screen.dart';
@@ -9,7 +8,7 @@ import 'package:markmymovie/presentation/widgets/custom_alerts.dart';
 class FolderListScreen extends StatefulWidget {
   final IsarService isarService;
   final String folderName;
-  final Id id;
+  final String id;
   final Icon folderIcon;
 
   const FolderListScreen({

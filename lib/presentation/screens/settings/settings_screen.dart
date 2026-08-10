@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
+import 'package:markmymovie/logic/auth_notifier.dart';
+import 'package:markmymovie/presentation/screens/auth/login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final IsarService isarService;
@@ -12,46 +14,24 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
-  bool _autoBackupEnabled = false;
   bool _darkModeEnabled = true;
   bool _highQualityImages = true;
-  String _selectedLanguage = 'English';
-  String _selectedRegion = 'US';
   String _displayName = 'Movie Lover';
 
   final String _appVersion = '1.0.0';
   final String _buildNumber = '1';
 
-  // ── Language & Region options ──────────────────────────────────────────────
+  final _authNotifier = AuthNotifier();
 
-  final List<String> _languages = [
-    'English', 'Hindi', 'Spanish', 'French', 'German',
-    'Japanese', 'Korean', 'Portuguese', 'Italian', 'Arabic',
-  ];
-
-  final List<Map<String, String>> _regions = [
-    {'code': 'US', 'name': 'United States'},
-    {'code': 'IN', 'name': 'India'},
-    {'code': 'GB', 'name': 'United Kingdom'},
-    {'code': 'CA', 'name': 'Canada'},
-    {'code': 'AU', 'name': 'Australia'},
-    {'code': 'DE', 'name': 'Germany'},
-    {'code': 'FR', 'name': 'France'},
-    {'code': 'JP', 'name': 'Japan'},
-    {'code': 'KR', 'name': 'South Korea'},
-    {'code': 'BR', 'name': 'Brazil'},
-  ];
-
-  // ── Content filter state ───────────────────────────────────────────────────
-
-  final Map<String, bool> _ageRatings = {
-    'G': true, 'PG': true, 'PG-13': true, 'R': true, 'NC-17': false,
-  };
-
-  final Map<String, bool> _genres = {
-    'Action': true, 'Comedy': true, 'Drama': true, 'Horror': false,
-    'Sci-Fi': true, 'Romance': true, 'Thriller': true, 'Animation': true,
-  };
+  @override
+  void initState() {
+    super.initState();
+    _authNotifier.checkSession().then((_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -100,54 +80,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildProfileSection(),
             const SizedBox(height: 32),
 
-            _buildSectionHeader('Content & Display'),
+            _buildSectionHeader('Data & Storage'),
             _buildSettingsGroup([
-              _buildNavigationTile(
-                icon: Icons.language_outlined,
-                title: 'Language',
-                subtitle: _selectedLanguage,
-                onTap: _showLanguageDialog,
-              ),
-              _buildNavigationTile(
-                icon: Icons.public_outlined,
-                title: 'Region',
-                subtitle:
-                'Content availability: $_selectedRegion',
-                onTap: _showRegionDialog,
-              ),
-              _buildNavigationTile(
-                icon: Icons.movie_filter_outlined,
-                title: 'Content Filters',
-                subtitle: 'Manage age ratings and genres',
-                onTap: _showContentFilters,
-              ),
-            ]),
-            const SizedBox(height: 32),
-
-            _buildSectionHeader('Data & Backup'),
-            _buildSettingsGroup([
-              _buildSwitchTile(
-                icon: Icons.backup_outlined,
-                title: 'Auto Backup',
-                subtitle: 'Automatically backup your data weekly',
-                value: _autoBackupEnabled,
-                onChanged: (value) =>
-                    setState(() => _autoBackupEnabled = value),
-              ),
-              _buildNavigationTile(
-                icon: Icons.cloud_upload_outlined,
-                title: 'Backup Database',
-                subtitle: 'Export your movies and folders',
-                onTap: _backupDatabase,
-                showChevron: false,
-              ),
-              _buildNavigationTile(
-                icon: Icons.cloud_download_outlined,
-                title: 'Restore Database',
-                subtitle: 'Import previously backed up data',
-                onTap: _restoreDatabase,
-                showChevron: false,
-              ),
               _buildNavigationTile(
                 icon: Icons.storage_outlined,
                 title: 'Storage Usage',
@@ -161,29 +95,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSettingsGroup([
               _buildNavigationTile(
                 icon: Icons.account_circle_outlined,
-                title: 'Account',
-                subtitle: 'Sign in to sync across devices',
-                onTap: _showAccountOptions,
-                trailing: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFD600).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFFFFD600).withOpacity(0.5),
-                      width: 1,
-                    ),
-                  ),
-                  child: const Text(
-                    'SOON',
-                    style: TextStyle(
-                      color: Color(0xFFFFD600),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                title: _authNotifier.user != null ? 'Sign Out' : 'Account',
+                subtitle: _authNotifier.user != null 
+                    ? 'Logged in as: ${_authNotifier.user!.email}' 
+                    : 'Sign in to sync across devices',
+                onTap: _authNotifier.user != null ? _handleSignOut : _showAccountOptions,
+                trailing: _authNotifier.user != null 
+                    ? const Icon(Icons.exit_to_app, color: Colors.redAccent)
+                    : Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD600).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: const Color(0xFFFFD600).withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: const Text(
+                          'SOON',
+                          style: TextStyle(
+                            color: Color(0xFFFFD600),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
               ),
             ]),
             const SizedBox(height: 32),
@@ -260,6 +197,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ══════════════════════════════════════════════════════════════════════════
 
   Widget _buildProfileSection() {
+    final user = _authNotifier.user;
+    final userName = user != null ? user.name : _displayName;
+    final userEmail = user != null ? user.email : 'Local Account';
+    final hasProfilePic = user != null && user.profilePicture.isNotEmpty;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -280,8 +222,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 width: 2,
               ),
             ),
-            child:
-            const Icon(Icons.person, color: Color(0xFFE50914), size: 32),
+            child: hasProfilePic
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(30),
+                    child: Image.network(
+                      user.profilePicture,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.person,
+                        color: Color(0xFFE50914),
+                        size: 32,
+                      ),
+                    ),
+                  )
+                : const Icon(Icons.person, color: Color(0xFFE50914), size: 32),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -289,7 +243,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _displayName,
+                  userName,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -298,7 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Local Account',
+                  userEmail,
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 14,
@@ -307,11 +261,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
-          IconButton(
-            onPressed: _editProfile,
-            icon:
-            const Icon(Icons.edit, color: Colors.white, size: 20),
-          ),
+          if (user == null)
+            IconButton(
+              onPressed: _editProfile,
+              icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+            ),
         ],
       ),
     );
@@ -342,39 +296,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Border.all(color: Colors.white.withOpacity(0.05), width: 1),
       ),
       child: Column(children: children),
-    );
-  }
-
-  Widget _buildSwitchTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: ListTile(
-        leading: _tileIcon(icon),
-        title: Text(title,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w500)),
-        subtitle: Text(subtitle,
-            style: TextStyle(
-                color: Colors.white.withOpacity(0.6), fontSize: 14)),
-        trailing: Switch(
-          value: value,
-          onChanged: onChanged,
-          activeColor: const Color(0xFFE50914),
-          activeTrackColor: const Color(0xFFE50914).withOpacity(0.3),
-          inactiveThumbColor: Colors.white.withOpacity(0.6),
-          inactiveTrackColor: Colors.white.withOpacity(0.1),
-        ),
-        contentPadding:
-        const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      ),
     );
   }
 
@@ -500,305 +421,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── Language ───────────────────────────────────────────────────────────────
+  // ── Account Sign Out ────────────────────────────────────────────────────────
 
-  void _showLanguageDialog() {
+  void _handleSignOut() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F1F),
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Select Language',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _languages.length,
-            itemBuilder: (_, i) {
-              final lang = _languages[i];
-              final selected = lang == _selectedLanguage;
-              return ListTile(
-                title: Text(lang,
-                    style: TextStyle(
-                        color:
-                        selected ? const Color(0xFFE50914) : Colors.white,
-                        fontWeight: selected
-                            ? FontWeight.bold
-                            : FontWeight.normal)),
-                trailing: selected
-                    ? const Icon(Icons.check, color: Color(0xFFE50914))
-                    : null,
-                onTap: () {
-                  setState(() => _selectedLanguage = lang);
-                  Navigator.pop(ctx);
-                  _showSnackBar('Language set to $lang');
-                },
-              );
-            },
-          ),
-        ),
+        title: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+        content: const Text('Are you sure you want to sign out?', style: TextStyle(color: Colors.white70)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel',
-                style: TextStyle(color: Colors.white.withOpacity(0.6))),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
           ),
-        ],
-      ),
-    );
-  }
-
-  // ── Region ─────────────────────────────────────────────────────────────────
-
-  void _showRegionDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F1F),
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Select Region',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _regions.length,
-            itemBuilder: (_, i) {
-              final region = _regions[i];
-              final selected = region['code'] == _selectedRegion;
-              return ListTile(
-                leading: Text(region['code']!,
-                    style: TextStyle(
-                        color: selected
-                            ? const Color(0xFFE50914)
-                            : Colors.white54,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13)),
-                title: Text(region['name']!,
-                    style: TextStyle(
-                        color:
-                        selected ? const Color(0xFFE50914) : Colors.white,
-                        fontWeight: selected
-                            ? FontWeight.bold
-                            : FontWeight.normal)),
-                trailing: selected
-                    ? const Icon(Icons.check, color: Color(0xFFE50914))
-                    : null,
-                onTap: () {
-                  setState(() => _selectedRegion = region['code']!);
-                  Navigator.pop(ctx);
-                  _showSnackBar('Region set to ${region['name']}');
-                },
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel',
-                style: TextStyle(color: Colors.white.withOpacity(0.6))),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Content Filters ────────────────────────────────────────────────────────
-
-  void _showContentFilters() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1F1F1F),
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.65,
-          maxChildSize: 0.9,
-          builder: (_, scrollCtrl) => SingleChildScrollView(
-            controller: scrollCtrl,
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Handle bar
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text('Content Filters',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-
-                // Age Ratings
-                Text('Age Ratings',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _ageRatings.entries.map((e) {
-                    return FilterChip(
-                      label: Text(e.key),
-                      selected: e.value,
-                      onSelected: (val) {
-                        setSheetState(
-                                () => _ageRatings[e.key] = val);
-                        setState(() => _ageRatings[e.key] = val);
-                      },
-                      selectedColor:
-                      const Color(0xFFE50914).withOpacity(0.3),
-                      checkmarkColor: const Color(0xFFE50914),
-                      backgroundColor:
-                      Colors.white.withOpacity(0.05),
-                      labelStyle: TextStyle(
-                          color: e.value
-                              ? const Color(0xFFE50914)
-                              : Colors.white70),
-                      side: BorderSide(
-                          color: e.value
-                              ? const Color(0xFFE50914)
-                              : Colors.white24),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 24),
-
-                // Genres
-                Text('Genres',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.7),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500)),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: _genres.entries.map((e) {
-                    return FilterChip(
-                      label: Text(e.key),
-                      selected: e.value,
-                      onSelected: (val) {
-                        setSheetState(() => _genres[e.key] = val);
-                        setState(() => _genres[e.key] = val);
-                      },
-                      selectedColor:
-                      const Color(0xFFE50914).withOpacity(0.3),
-                      checkmarkColor: const Color(0xFFE50914),
-                      backgroundColor:
-                      Colors.white.withOpacity(0.05),
-                      labelStyle: TextStyle(
-                          color: e.value
-                              ? const Color(0xFFE50914)
-                              : Colors.white70),
-                      side: BorderSide(
-                          color: e.value
-                              ? const Color(0xFFE50914)
-                              : Colors.white24),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 32),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE50914),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      _showSnackBar('Content filters saved');
-                    },
-                    child: const Text('Save Filters',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Backup / Restore ───────────────────────────────────────────────────────
-
-  Future<void> _backupDatabase() async {
-    _showSnackBar('Backup started…');
-    try {
-      // await widget.isarService.backupDatabase();
-      await Future.delayed(const Duration(seconds: 1)); // simulate
-      _showSnackBar('✓ Backup completed successfully');
-    } catch (e) {
-      _showSnackBar('Backup failed: $e', isError: true);
-    }
-  }
-
-  Future<void> _restoreDatabase() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F1F),
-        shape:
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Restore Database',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Text(
-            'This will replace all current data with the backup. Continue?',
-            style:
-            TextStyle(color: Colors.white.withOpacity(0.7))),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text('Cancel',
-                  style: TextStyle(
-                      color: Colors.white.withOpacity(0.6)))),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE50914)),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Restore',
-                style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE50914)),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _authNotifier.logout();
+              if (mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (context) => LoginScreen(isarService: widget.isarService),
+                  ),
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text('Sign Out'),
           ),
         ],
       ),
     );
-    if (confirm == true) {
-      _showSnackBar('Restore started…');
-      try {
-        // await widget.isarService.restoreDatabase();
-        await Future.delayed(const Duration(seconds: 1));
-        _showSnackBar('✓ Restore completed successfully');
-      } catch (e) {
-        _showSnackBar('Restore failed: $e', isError: true);
-      }
-    }
   }
 
   // ── Storage ────────────────────────────────────────────────────────────────
@@ -818,9 +473,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             _storageRow('Database', '12.4 MB'),
             _storageRow('Image Cache', '48.2 MB'),
-            _storageRow('Backups', '8.1 MB'),
             const Divider(color: Colors.white24, height: 24),
-            _storageRow('Total', '68.7 MB', highlight: true),
+            _storageRow('Total', '60.6 MB', highlight: true),
           ],
         ),
         actions: [
@@ -941,12 +595,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'a': 'Yes! Long-press a movie and select "Move to folder", or create folders from the home screen.'
       },
       {
-        'q': 'How do I backup my data?',
-        'a': 'Go to Settings → Data & Backup → Backup Database to export your data.'
-      },
-      {
         'q': 'Is my data stored online?',
-        'a': 'All data is stored locally on your device. No account is required.'
+        'a': 'All data is stored locally on your device. You can sync it across devices by signing in to your Google Account.'
       },
     ];
 

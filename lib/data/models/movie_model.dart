@@ -1,10 +1,8 @@
-import 'package:isar/isar.dart';
+import 'dart:math';
 
-part 'movie_model.g.dart';
-
-@collection
 class MovieModel {
-  Id id; // can be the same as "id" from TMDb or Watchmode
+  String id; // unique 12-character alphanumeric ID
+  int? serverMovieId;
 
   late String title;
   late String originalTitle;
@@ -24,9 +22,10 @@ class MovieModel {
 
   String? trailer;
   String? trailerThumbnail;
-  late int folderId;
+  late String folderId;
   DateTime modifiedTime = DateTime.now();
   bool isWatch = false;
+
   MovieModel({
     required this.id,
     required this.title,
@@ -46,9 +45,10 @@ class MovieModel {
     this.trailer,
     this.trailerThumbnail,
   });
+
   factory MovieModel.fromJson(Map<String, dynamic> json) {
     return MovieModel(
-      id: Isar.autoIncrement, // or generate custom hash if needed
+      id: generateRandomId(),
       title: json['Title'] ?? '',
       originalTitle: json['Title'] ?? '',
       plotOverview: json['Plot'] ?? '',
@@ -62,10 +62,17 @@ class MovieModel {
       originalLanguage: json['Language'] ?? '',
       trailer: null,
       trailerThumbnail: null,
-      folderId: 0,
+      folderId: '',
       isWatch: false,
       modifiedTime: DateTime.now(),
     );
+  }
+
+  static String generateRandomId() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rnd = Random();
+    return String.fromCharCodes(Iterable.generate(
+        12, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
   }
 
 

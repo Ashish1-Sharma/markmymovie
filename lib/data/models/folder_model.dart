@@ -1,20 +1,16 @@
-import 'package:flutter/cupertino.dart';
-import 'package:isar/isar.dart';
+import 'dart:math';
 import 'movie_model.dart';
 
-part 'folder_model.g.dart';
-
-@collection
 class FolderModel {
-  Id id = Isar.autoIncrement;
+  String id = '';
+  int? serverFolderId;
 
   late String name; // e.g. "Favorites", "Watch Later"
 
   late DateTime createdAt;
 
-  final movieIds = IsarLinks<MovieModel>(); // Links to MovieModel
+  final List<MovieModel> movieIds = []; // Links to MovieModel
 
-  @Index() // 👈 Added index for sorting/filtering
   late DateTime modifiedTime;
 
   late int iconCodePoint;
@@ -28,5 +24,14 @@ class FolderModel {
     required this.iconCodePoint,
     required this.iconFontFamily,
     required this.colorValue,
-  });
+  }) {
+    id = generateRandomId();
+  }
+
+  static String generateRandomId() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final rnd = Random();
+    return String.fromCharCodes(Iterable.generate(
+        12, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
+  }
 }

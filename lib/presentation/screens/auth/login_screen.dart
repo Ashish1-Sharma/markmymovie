@@ -110,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen>
     setState(() => _isLoading = false);
 
     if (success && _authNotifier.user != null) {
+      widget.isarService.syncFoldersFromServer();
       final userName = _authNotifier.user!.name;
       _showSuccessSnackbar('Welcome back, $userName! 🎬');
 
