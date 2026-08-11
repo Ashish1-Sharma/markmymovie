@@ -341,7 +341,7 @@ class _LoginScreenState extends State<LoginScreen>
             stops: [0.0, 0.5, 1.0],
           ).createShader(bounds),
           child: const Text(
-            'Welcome to MovieVault',
+            'Welcome to Watchstash',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 30,

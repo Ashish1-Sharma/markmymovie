@@ -6,7 +6,7 @@ import 'package:markmymovie/core/constants/auth_constants.dart';
 import 'package:markmymovie/data/models/user_model.dart';
 import 'package:markmymovie/data/services/auth_service.dart';
 
-/// Handles all HTTP communication with the MarkMyMovie auth backend.
+/// Handles all HTTP communication with the Watchstash auth backend.
 class AuthApiService {
   AuthApiService._();
 

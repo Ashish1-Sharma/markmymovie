@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/data/models/movie_card_model.dart';
-import 'package:markmymovie/data/models/movie_model.dart';
 import 'package:markmymovie/presentation/screens/detail/movie_detail_screen.dart';
 
 import '../../../data/services/tmdb_service.dart';
 
+// Brand palette (Watchstash) — near-black background, brand red accent,
+// off-white text, muted gray subtext.
+const _bgColor = Color(0xFF0A0808);
+const _surfaceColor = Color(0xFF161414);
+const _borderColor = Color(0x1AF5F5F5); // off-white @ 10%
+const _brandRed = Color(0xFFDE2028);
+const _textColor = Color(0xFFF5F5F5);
+const _subtextColor = Color(0xFF969496);
+
 class SearchScreen extends StatefulWidget {
   final IsarService isarService;
-  const SearchScreen({super.key,required this.isarService});
+  const SearchScreen({super.key, required this.isarService});
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -23,6 +32,8 @@ class _SearchScreenState extends State<SearchScreen> {
   List<MovieCardModel> _searchResults = [];
   bool _isLoading = false;
   bool _hasSearched = false;
+  bool _hasError = false;
+  final TmdbService _tmdbService = TmdbService();
 
   @override
   void initState() {
@@ -37,17 +48,6 @@ class _SearchScreenState extends State<SearchScreen> {
     _debounceTimer?.cancel();
     super.dispose();
   }
-  final TmdbService _tmdbService = TmdbService();
-
-  Future<void> _getMockMovies(String query) async {
-    final results = await _tmdbService.searchMovies(query,widget.isarService);
-    // _searchResults = results;
-
-    setState(() {
-      _searchResults = results;
-      _isLoading = false;
-    });
-  }
 
   void _onSearchChanged() {
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
@@ -59,6 +59,7 @@ class _SearchScreenState extends State<SearchScreen> {
         setState(() {
           _searchResults.clear();
           _hasSearched = false;
+          _hasError = false;
         });
       }
     });
@@ -70,105 +71,83 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() {
       _isLoading = true;
       _hasSearched = true;
+      _hasError = false;
     });
 
     try {
-      // TODO: Replace with your actual TMDb API call
-      await Future.delayed(const Duration(milliseconds: 500)); // Simulate API call
-
-      // Mock data - replace with actual API response
-      _getMockMovies(query);
-
+      final results = await _tmdbService.searchMovies(query, widget.isarService);
+      if (!mounted) return;
       setState(() {
-        // _searchResults = results;
+        _searchResults = results;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _searchResults.clear();
         _isLoading = false;
+        _hasError = true;
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Search failed. Please try again.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Search failed. Please try again.'),
+          backgroundColor: _brandRed,
+        ),
+      );
     }
   }
-
-  // Mock data - replace with your actual TMDb API integration
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212), // Theater-like background
+      backgroundColor: _bgColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: _bgColor,
         elevation: 0,
         title: const Text(
-          'Search Movies',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-          ),
+          'Search',
+          style: TextStyle(color: _textColor, fontWeight: FontWeight.w600),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: _textColor),
       ),
       body: Column(
         children: [
-          // Search Bar
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1F1F1F), // Card background
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _searchFocusNode,
-              style: const TextStyle(color: Colors.white),
+          _buildSearchBar(),
+          Expanded(child: _buildContent()),
+        ],
+      ),
+    );
+  }
 
-              decoration: InputDecoration(
-                hintText: 'Search for movies...',
-                hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-                border: InputBorder.none,
-                icon: Icon(
-                  Icons.search,
-                  color: Colors.white.withOpacity(0.7),
-                ),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                  icon: Icon(
-                    Icons.clear,
-                    color: Colors.white.withOpacity(0.7),
-                  ),
+  Widget _buildSearchBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderColor),
+      ),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocusNode,
+        style: const TextStyle(color: _textColor, fontSize: 15),
+        decoration: InputDecoration(
+          hintText: 'Search movies & shows…',
+          hintStyle: const TextStyle(color: _subtextColor),
+          border: InputBorder.none,
+          icon: const Icon(Icons.search, color: _subtextColor, size: 20),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: _subtextColor, size: 20),
                   onPressed: () {
                     _searchController.clear();
                     _searchFocusNode.unfocus();
                   },
                 )
-                    : null,
-              ),
-            ),
-          ),
-
-          // Content Area
-          Expanded(
-            child: _buildContent(),
-          ),
-        ],
+              : null,
+        ),
       ),
     );
   }
@@ -177,201 +156,164 @@ class _SearchScreenState extends State<SearchScreen> {
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE50914)), // Netflix red
+          valueColor: AlwaysStoppedAnimation<Color>(_brandRed),
         ),
       );
     }
 
     if (!_hasSearched) {
-      return _buildEmptyState();
+      return _buildMessageState(
+        icon: Icons.movie_outlined,
+        title: 'Find something to watch',
+        subtitle: 'Search for any movie or show to add to your folders',
+      );
     }
 
-    if (_searchResults.isEmpty) {
-      return _buildNoResultsState();
+    if (_searchResults.isEmpty && !_hasError) {
+      return _buildMessageState(
+        icon: Icons.search_off,
+        title: 'No results',
+        subtitle: 'Try a different title or spelling',
+      );
     }
 
     return _buildSearchResults();
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildMessageState({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.movie_outlined,
-            size: 64,
-            color: Colors.white.withOpacity(0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Discover Your Next Movie',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 48, color: _subtextColor.withOpacity(0.6)),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: _textColor,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Search for any movie to add to your collection',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white.withOpacity(0.6),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 14, color: _subtextColor),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoResultsState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.search_off,
-            size: 64,
-            color: Colors.white.withOpacity(0.3),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No Movies Found',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.8),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Try a different search term',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white.withOpacity(0.6),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSearchResults() {
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+        childAspectRatio: 0.6,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
       ),
       itemCount: _searchResults.length,
       itemBuilder: (context, index) {
-        return MovieCard(movie: _searchResults[index],isarService: widget.isarService,searchFocusNode: _searchFocusNode,);
+        return MovieCard(
+          movie: _searchResults[index],
+          isarService: widget.isarService,
+          searchFocusNode: _searchFocusNode,
+        );
       },
     );
   }
 }
 
-class MovieCard extends StatefulWidget {
+class MovieCard extends StatelessWidget {
   final MovieCardModel movie;
   final IsarService isarService;
   final FocusNode searchFocusNode;
 
-  const MovieCard({super.key, required this.movie,required this.isarService,required this.searchFocusNode});
+  const MovieCard({
+    super.key,
+    required this.movie,
+    required this.isarService,
+    required this.searchFocusNode,
+  });
 
-  @override
-  State<MovieCard> createState() => _MovieCardState();
-}
-
-class _MovieCardState extends State<MovieCard> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        widget.searchFocusNode.unfocus();
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => MovieDetailScreen(isarService: widget.isarService, movieId: widget.movie.imdbID),));
+        searchFocusNode.unfocus();
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => MovieDetailScreen(
+              isarService: isarService,
+              movieId: movie.tmdbId,
+              mediaType: movie.mediaType,
+            ),
+          ),
+        );
       },
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F1F), // Card background
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: _surfaceColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _borderColor),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Movie Poster
             Expanded(
               flex: 3,
-              child: Container(
-                width: double.infinity,
-                decoration: const BoxDecoration(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                  child: widget.movie.poster != null
-                      ? Image.network(
-                    widget.movie.poster,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return _buildPosterPlaceholder();
-                    },
-                  )
-                      : _buildPosterPlaceholder(),
-                ),
-              ),
+              child: movie.poster.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: movie.poster,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => _buildPosterPlaceholder(),
+                      errorWidget: (context, url, error) => _buildPosterPlaceholder(),
+                    )
+                  : _buildPosterPlaceholder(),
             ),
-
-            // Movie Info
             Expanded(
               flex: 1,
               child: Padding(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Title
                     Text(
-                      widget.movie.title,
+                      movie.title,
                       style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
+                        color: _textColor,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
+                        height: 1.2,
                       ),
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-
-                    // Rating
-                    // Row(
-                    //   children: [
-                    //     const Icon(
-                    //       Icons.star,
-                    //       color: Color(0xFFFFD600), // Amber for ratings
-                    //       size: 16,
-                    //     ),
-                    //     const SizedBox(width: 4),
-                    //     Text(
-                    //       widget.movie.userRating.toStringAsFixed(1),
-                    //       style: TextStyle(
-                    //         color: Colors.white.withOpacity(0.8),
-                    //         fontSize: 12,
-                    //         fontWeight: FontWeight.w500,
-                    //       ),
-                    //     ),
-                    //   ],
-                    // ),
+                    const SizedBox(height: 4),
+                    Text(
+                      [
+                        if (movie.year.isNotEmpty) movie.year,
+                        movie.mediaType == 'tv' ? 'Show' : 'Movie',
+                      ].join(' · '),
+                      style: const TextStyle(
+                        color: _subtextColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -384,14 +326,9 @@ class _MovieCardState extends State<MovieCard> {
 
   Widget _buildPosterPlaceholder() {
     return Container(
-      color: Colors.grey[800],
-      child: const Center(
-        child: Icon(
-          Icons.movie,
-          color: Colors.white54,
-          size: 48,
-        ),
-      ),
+      color: _bgColor,
+      alignment: Alignment.center,
+      child: const Icon(Icons.movie_outlined, color: _subtextColor, size: 36),
     );
   }
 }

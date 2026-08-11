@@ -3,6 +3,7 @@ import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/presentation/screens/home/home_screen.dart';
 import 'package:markmymovie/logic/auth_notifier.dart';
 import 'package:markmymovie/presentation/screens/auth/login_screen.dart';
+import 'package:markmymovie/presentation/screens/splash/watchstash_gif_splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   IsarService isarService = IsarService();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -25,11 +27,51 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MarkMyMovie',
+      navigatorKey: _navigatorKey,
+      title: 'Watchstash',
       debugShowCheckedModeBanner: false,
       theme: _buildCinematicTheme(),
-      home: SplashScreen(isarService: isarService),
+      home: WatchstashGifSplashScreen(onFinished: _handleSplashFinished),
     );
+  }
+
+  /// Runs once the splash's loading animation completes: resolves the auth
+  /// session and hands off to Home/Login, fading between them.
+  Future<void> _handleSplashFinished() async {
+    try {
+      final authNotifier = AuthNotifier();
+      await authNotifier.checkSession();
+
+      if (!mounted) return;
+
+      if (authNotifier.isAuthenticated) {
+        isarService.syncFoldersFromServer();
+      }
+
+      final Widget nextScreen = authNotifier.isAuthenticated
+          ? HomeScreen(isarService: isarService)
+          : LoginScreen(isarService: isarService);
+
+      _navigatorKey.currentState?.pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+            return FadeTransition(
+              opacity: curved,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.97, end: 1.0).animate(curved),
+                child: child,
+              ),
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 650),
+          reverseTransitionDuration: const Duration(milliseconds: 650),
+        ),
+      );
+    } catch (e) {
+      debugPrint('App initialization failed: $e');
+    }
   }
 
   ThemeData _buildCinematicTheme() {
@@ -410,7 +452,7 @@ class _SplashScreenState extends State<SplashScreen>
                 stops: [0.0, 0.5, 1.0],
               ).createShader(bounds),
               child: const Text(
-                'MarkMyMovie',
+                'Watchstash',
                 style: TextStyle(
                   fontSize: 36,
                   fontWeight: FontWeight.bold,
@@ -421,7 +463,7 @@ class _SplashScreenState extends State<SplashScreen>
             ),
             const SizedBox(height: 8),
             Text(
-              'Your personal movie vault',
+              'Your Movie Watchlist, Stashed',
               style: TextStyle(
                 fontSize: 16,
                 color: const Color(0xFFB3B3B3).withOpacity(_textFadeAnimation.value),
@@ -490,7 +532,7 @@ class _SplashScreenState extends State<SplashScreen>
     if (progress < 0.3) {
       return 'Initializing database...';
     } else if (progress < 0.6) {
-      return 'Setting up movie vault...';
+      return 'Setting up your stash...';
     } else if (progress < 0.9) {
       return 'Preparing cinema experience...';
     } else {

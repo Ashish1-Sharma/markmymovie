@@ -1,496 +1,344 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:markmymovie/core/theme/app_theme.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/data/models/folder_model.dart';
 import 'package:markmymovie/data/models/movie_model.dart';
+import 'package:markmymovie/data/models/watch_provider_model.dart';
 import 'package:markmymovie/data/services/tmdb_service.dart';
-
 
 class MovieDetailScreen extends StatefulWidget {
   final IsarService isarService;
-  final String? movieId;
-  final MovieModel? movieModel;
+  final String? movieId; // TMDB numeric id (when opened from search)
+  final String? mediaType; // 'movie' or 'tv' (when opened from search)
+  final MovieModel? movieModel; // pre-loaded local movie (when opened from a folder)
 
   const MovieDetailScreen({
     super.key,
     required this.isarService,
-     this.movieId,
-     this.movieModel,
+    this.movieId,
+    this.mediaType,
+    this.movieModel,
   });
 
   @override
   State<MovieDetailScreen> createState() => _MovieDetailScreenState();
 }
 
-class _MovieDetailScreenState extends State<MovieDetailScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _fadeController;
-  late AnimationController _scaleController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
-   late MovieModel movie;
-  bool _isInFolder = false; // Mock data - check if movie is in any folder
-  bool _isWatched = false; // Mock data - check if movie is watched
-  bool _isFavorite = false; // Mock data - check if movie is favorite
- bool  isLoaded = false;
-  final ScrollController _scrollController = ScrollController();
-  bool _isScrolled = false;
+enum _DetailTab { overview, cast, whereToWatch }
+
+class _MovieDetailScreenState extends State<MovieDetailScreen> {
+  late MovieModel movie;
+  bool _isWatched = false;
+  bool _isFavorite = false;
+  bool isLoaded = false;
+  _DetailTab _tab = _DetailTab.overview;
 
   @override
   void initState() {
     super.initState();
-    _initializeAnimations();
-    _setupScrollListener();
     _loadData();
   }
 
-  Future<void> _loadData() async{
-    if(widget.movieId != null){
-      movie = await TmdbService().fetchMovieDetails(widget.movieId ?? '');
-    } else{
+  Future<void> _loadData() async {
+    if (widget.movieId != null) {
+      // Opened from search — full TMDB details (incl. cast/providers/trailer)
+      // come back in one call.
+      movie = await TmdbService().fetchMovieDetails(
+        widget.movieId!,
+        mediaType: widget.mediaType ?? 'movie',
+      );
+    } else {
+      // Opened from a saved folder — we only have local fields. Fetch the
+      // extras (cast/watch providers/trailer) live and merge them in;
+      // degrade quietly if TMDB can't be reached or the title can't be
+      // resolved.
       movie = widget.movieModel!;
+      try {
+        final extras = await TmdbService().fetchExtrasForImdbId(movie.imdbId);
+        if (extras != null) {
+          movie.cast = extras.cast;
+          movie.watchProviders = extras.watchProviders;
+          movie.trailer = extras.trailer ?? movie.trailer;
+          movie.trailerThumbnail = extras.trailerThumbnail ?? movie.trailerThumbnail;
+        }
+      } catch (_) {
+        // No network / lookup failure — show what we already have locally.
+      }
     }
 
     _isWatched = movie.isWatch;
     isLoaded = true;
-    setState(() {
-
-    });
-  }
-  void _initializeAnimations() {
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _scaleController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
-    );
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(parent: _scaleController, curve: Curves.elasticOut),
-    );
-
-    _fadeController.forward();
-    _scaleController.forward();
-  }
-
-  void _setupScrollListener() {
-    _scrollController.addListener(() {
-      final isScrolled = _scrollController.offset > 200;
-      if (isScrolled != _isScrolled) {
-        setState(() {
-          _isScrolled = isScrolled;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _fadeController.dispose();
-    _scaleController.dispose();
-    _scrollController.dispose();
-    super.dispose();
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    return Theme(
-      data: _buildCinematicTheme(),
-      child: !isLoaded ?Center(child: CircularProgressIndicator()) : Scaffold(
-        backgroundColor: const Color(0xFF121212),
-        body: FadeTransition(
-          opacity: _fadeAnimation,
-          child: CustomScrollView(
-            controller: _scrollController,
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: !isLoaded
+          ? const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.brandRed),
+                strokeWidth: 2.5,
+              ),
+            )
+          : CustomScrollView(
+            // controller: _scrollController,
             physics: const BouncingScrollPhysics(),
             slivers: [
-              _buildHeroAppBar(),
+              _buildStickyThumbnail(),
               _buildMovieInfo(),
               _buildActionButtons(),
-              _buildPlotSection(),
-              _buildDetailsSection(),
-              _buildTrailerSection(),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
+              _buildSegmentedTabs(),
+              _buildTabContent(),
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
             ],
           ),
-        ),
-        // floatingActionButton: _buildFloatingActionButton(),
-      ),
     );
   }
 
-  ThemeData _buildCinematicTheme() {
-    return ThemeData(
-      brightness: Brightness.dark,
-      primarySwatch: Colors.red,
-      scaffoldBackgroundColor: const Color(0xFF121212),
-      cardColor: const Color(0xFF1F1F1F),
-    );
-  }
+  // ---------------------------------------------------------------------
+  // Sticky landscape thumbnail (fixed size, pinned — no scroll animation)
+  // ---------------------------------------------------------------------
 
-  Widget _buildHeroAppBar() {
-    return SliverAppBar(
-      expandedHeight: 400,
+  static const double _thumbnailHeight = 220;
+
+  Widget _buildStickyThumbnail() {
+    return SliverPersistentHeader(
       pinned: true,
-      elevation: 0,
-      backgroundColor:
-          _isScrolled
-              ? const Color(0xFF121212).withOpacity(0.95)
-              : Colors.transparent,
-      leading: _buildAppBarButton(
-        icon: Icons.arrow_back,
-        onPressed: () => Navigator.pop(context),
-      ),
-      actions: [
-        _buildAppBarButton(
-          icon: _isFavorite ? Icons.favorite : Icons.favorite_border,
-          color: _isFavorite ? const Color(0xFFE50914) : Colors.white70,
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            setState(() {
-              _isFavorite = !_isFavorite;
-            });
-          },
-        ),
-        _buildAppBarButton(
-          icon: Icons.share,
-          onPressed: () {
-            // Share movie functionality
-          },
-        ),
-        const SizedBox(width: 8),
-      ],
-      flexibleSpace: FlexibleSpaceBar(
-        background: _buildHeroImage(),
-        collapseMode: CollapseMode.parallax,
+      delegate: _StickyThumbnailDelegate(
+        height: _thumbnailHeight,
+        child: _buildThumbnailContent(),
       ),
     );
   }
 
-  Widget _buildAppBarButton({
-    required IconData icon,
-    required VoidCallback onPressed,
-    Color? color,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.all(4),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.1), width: 1),
-        ),
-        child: IconButton(
-          onPressed: onPressed,
-          icon: Icon(icon, color: color ?? Colors.white70, size: 22),
-        ),
-      ),
-    );
-  }
+  Widget _buildThumbnailContent() {
+    final thumbnailUrl = (movie.trailerThumbnail?.isNotEmpty ?? false)
+        ? movie.trailerThumbnail!
+        : movie.poster;
+    final hasTrailer = movie.trailer != null && movie.trailer!.isNotEmpty;
 
-  Widget _buildHeroImage() {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        // Background poster with blur effect
-        if (movie.poster.isEmpty) ...[
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF1F1F1F),
-                  const Color(0xFF2A2A2A),
-                  const Color(0xFF1F1F1F),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return Container(
+      color: AppColors.bg,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (thumbnailUrl.isEmpty)
+            Container(
+              color: AppColors.surface,
+              child: Center(
+                child: Icon(Icons.movie_outlined, color: AppColors.textTertiary.withOpacity(0.5), size: 72),
               ),
+            )
+          else
+            CachedNetworkImage(
+              imageUrl: thumbnailUrl,
+              fit: BoxFit.cover,
+              errorWidget: (context, url, error) => Container(color: AppColors.surface),
             ),
-            child: const Center(
-              child: Icon(Icons.movie, color: Color(0xFF666666), size: 120),
-            ),
-          ),
-          // In real app: use Image.network(movie.poster) with blur and opacity
-
-          // Gradient overlay
+          // Thin bottom fade so the title block below sits on a clean edge.
           Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withOpacity(0.3),
-                  Colors.black.withOpacity(0.8),
-                  const Color(0xFF121212),
-                ],
-                stops: const [0.0, 0.3, 0.7, 1.0],
+                colors: [Colors.transparent, Color(0x66000000), AppColors.bg],
+                stops: [0.6, 0.85, 1.0],
               ),
             ),
           ),
-
-          // Movie poster in bottom section
+          if (hasTrailer)
+            Center(
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  _openTrailer(movie.trailer!);
+                },
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.overlayScrim,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+                ),
+              ),
+            ),
           Positioned(
-            bottom: 40,
-            left: 20,
-            child: ScaleTransition(
-              scale: _scaleAnimation,
-              child: _buildMoviePoster(),
+            top: 12,
+            left: 12,
+            child: _NavGlassButton(
+              icon: Icons.arrow_back_ios_new_rounded,
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                Navigator.pop(context);
+              },
             ),
           ),
-        ],
-
-        Image.network(movie.poster),
-        // Rating badge
-        Positioned(top: 100, right: 20, child: _buildRatingBadge()),
-      ],
-    );
-  }
-
-  Widget _buildMoviePoster() {
-    return Container(
-      width: 160,
-      height: 240,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.6),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: const Color(0xFFE50914).withOpacity(0.1),
-            blurRadius: 30,
-            offset: const Offset(0, 0),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [const Color(0xFF2A2A2A), const Color(0xFF1F1F1F)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+          Positioned(
+            top: 12,
+            right: 12,
+            child: Row(
+              children: [
+                _NavGlassButton(
+                  icon: _isWatched ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
+                  color: _isWatched ? AppColors.success : null,
+                  onPressed: () async {
+                    HapticFeedback.mediumImpact();
+                    movie.isWatch = !_isWatched;
+                    if (movie.folderId.isNotEmpty) {
+                      await widget.isarService.saveMovie(movie);
+                    }
+                    setState(() => _isWatched = !_isWatched);
+                  },
+                ),
+                const SizedBox(width: 8),
+                _NavGlassButton(
+                  icon: _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  color: _isFavorite ? AppColors.brandRed : null,
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    setState(() => _isFavorite = !_isFavorite);
+                  },
+                ),
+              ],
             ),
           ),
-          child: const Center(
-            child: Icon(Icons.movie, color: Color(0xFF666666), size: 64),
-          ),
-        ),
+          if (movie.userRating > 0) Positioned(bottom: 12, right: 12, child: _buildRatingBadge()),
+        ],
       ),
     );
   }
 
   Widget _buildRatingBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFFFD600), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFFD600).withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.star, color: Color(0xFFFFD600), size: 24),
-          const SizedBox(width: 6),
-          Text(
-            movie.userRating.toStringAsFixed(1),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
+    return GlassMaterial(
+      blur: 16,
+      tint: AppColors.overlayScrim,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      border: Border.all(color: AppColors.gold.withOpacity(0.5)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.star_rounded, color: AppColors.gold, size: 18),
+            const SizedBox(width: 5),
+            Text(movie.userRating.toStringAsFixed(1), style: AppTextStyles.callout),
+          ],
+        ),
       ),
     );
   }
 
+  // ---------------------------------------------------------------------
+  // Title / meta
+  // ---------------------------------------------------------------------
+
   Widget _buildMovieInfo() {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Title and year
-            Text(
-              movie.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                letterSpacing: -1.0,
-                height: 1.1,
-              ),
-            ),
-            const SizedBox(height: 8),
+            Text(movie.title, style: AppTextStyles.largeTitle),
+            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                Text(
-                  movie.year.toString(),
-                  style: const TextStyle(
-                    color: Color(0xFFE50914),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                if (movie.year > 0) ...[
+                  Text(
+                    movie.year.toString(),
+                    style: AppTextStyles.callout.copyWith(color: AppColors.brandRed),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F1F),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
-                  ),
-                  child: Text(
-                    movie.type.toUpperCase(),
-                    style: const TextStyle(
-                      color: Color(0xFFB3B3B3),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                ),
+                  const SizedBox(width: AppSpacing.md),
+                ],
+                _buildPillLabel(movie.type == 'tv' ? 'SHOW' : 'MOVIE'),
+                if (movie.originalLanguage.isNotEmpty) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  _buildPillLabel(movie.originalLanguage.toUpperCase()),
+                ],
               ],
             ),
-            const SizedBox(height: 16),
-
-            // Genres
-            _buildGenreChips(),
-
-            const SizedBox(height: 20),
-
-            // Language info
-            _buildInfoRow(
-              'Original Language',
-              movie.originalLanguage.toUpperCase(),
-            ),
-            const SizedBox(height: 8),
-            // _buildInfoRow('IMDb ID', movie.imdbId),
+            if (movie.genreNames.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _buildGenreChips(),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPillLabel(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Text(text, style: AppTextStyles.caption),
     );
   }
 
   Widget _buildGenreChips() {
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children:
-          movie.genreNames.map((genre) {
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFE50914).withOpacity(0.1),
-                    const Color(0xFF1F1F1F),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFFE50914).withOpacity(0.3),
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                genre,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            );
-          }).toList(),
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      children: movie.genreNames.map((genre) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.brandRed.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: AppColors.brandRed.withOpacity(0.35)),
+          ),
+          child: Text(genre, style: AppTextStyles.footnote.copyWith(color: AppColors.textPrimary)),
+        );
+      }).toList(),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      children: [
-        Text(
-          '$label: ',
-          style: const TextStyle(
-            color: Color(0xFFB3B3B3),
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
+  // ---------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------
 
   Widget _buildActionButtons() {
+    final hasTrailer = movie.trailer != null && movie.trailer!.isNotEmpty;
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0),
         child: Row(
           children: [
-            if(movie.folderId.isNotEmpty)
             Expanded(
-              child: _buildActionButton(
-                icon:
-                    _isWatched ? Icons.check_circle : Icons.play_circle_filled,
-                label: _isWatched ? 'Watched' : 'Mark as Watched',
-                color:
-                    _isWatched
-                        ? const Color(0xFF00C853)
-                        : const Color(0xFFE50914),
+              child: _PillButton(
+                icon: movie.folderId.isNotEmpty ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                label: movie.folderId.isNotEmpty ? 'In Folders' : 'Add to Folder',
+                filled: false,
                 onPressed: () async {
-                  HapticFeedback.mediumImpact();
-                  movie.isWatch = !_isWatched;
-                  await widget.isarService.saveMovie(movie);
-                  setState(() {
-                    _isWatched = !_isWatched;
-                  });
+                  HapticFeedback.selectionClick();
+                  final folders = await widget.isarService.getAllFolders();
+                  if (mounted) _showFolderOptions(folders);
                 },
               ),
             ),
-            if(movie.folderId.isNotEmpty)
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
-              child: _buildActionButton(
-                icon: movie.folderId.isNotEmpty ? Icons.bookmark : Icons.bookmark_border,
-                label: movie.folderId.isNotEmpty ? 'In Folders' : 'Add to Folder',
-                color:
-                movie.folderId.isNotEmpty
-                        ? const Color(0xFFFFD600)
-                        : const Color(0xFF666666),
-                onPressed: () async{
-                 final folders = await widget.isarService.getAllFolders();
-                  _showFolderOptions(folders);
-                },
+              child: _PillButton(
+                icon: Icons.play_arrow_rounded,
+                label: hasTrailer ? 'Watch Trailer' : 'No Trailer',
+                filled: true,
+                onPressed: hasTrailer
+                    ? () {
+                        HapticFeedback.mediumImpact();
+                        _openTrailer(movie.trailer!);
+                      }
+                    : null,
               ),
             ),
           ],
@@ -499,496 +347,465 @@ class _MovieDetailScreenState extends State<MovieDetailScreen>
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onPressed,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 15,
-            offset: const Offset(0, 6),
+  // ---------------------------------------------------------------------
+  // Segmented tabs (Overview / Cast / Where to Watch)
+  // ---------------------------------------------------------------------
+
+  Widget _buildSegmentedTabs() {
+    final tabs = <_DetailTab, String>{
+      _DetailTab.overview: 'Overview',
+      _DetailTab.cast: 'Cast',
+      _DetailTab.whereToWatch: 'Where to Watch',
+    };
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xxl, AppSpacing.xl, 0),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.border),
           ),
+          child: Row(
+            children: tabs.entries.map((entry) {
+              final selected = _tab == entry.key;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    if (_tab == entry.key) return;
+                    HapticFeedback.selectionClick();
+                    setState(() => _tab = entry.key);
+                  },
+                  child: AnimatedContainer(
+                    duration: AppMotion.fast,
+                    curve: AppMotion.standard,
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    decoration: BoxDecoration(
+                      color: selected ? AppColors.surfaceRaised : Colors.transparent,
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: selected ? Border.all(color: AppColors.borderStrong) : null,
+                    ),
+                    child: Text(
+                      entry.value,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.footnote.copyWith(
+                        color: selected ? AppColors.textPrimary : AppColors.textTertiary,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabContent() {
+    return SliverToBoxAdapter(
+      child: AnimatedSwitcher(
+        duration: AppMotion.medium,
+        switchInCurve: AppMotion.springOut,
+        switchOutCurve: AppMotion.standard,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0, 0.02), end: Offset.zero).animate(animation),
+            child: child,
+          ),
+        ),
+        child: KeyedSubtree(
+          key: ValueKey(_tab),
+          child: switch (_tab) {
+            _DetailTab.overview => _buildOverviewTab(),
+            _DetailTab.cast => _buildCastTab(),
+            _DetailTab.whereToWatch => _buildWhereToWatchTab(),
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewTab() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (movie.plotOverview.isNotEmpty)
+            Text(movie.plotOverview, style: AppTextStyles.body)
+          else
+            Text('No overview available.', style: AppTextStyles.body),
+          const SizedBox(height: AppSpacing.xxl),
+          _buildDetailsCard(),
         ],
       ),
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 22),
-        label: Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor:
-              color == const Color(0xFFFFD600) ? Colors.black : Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
-        ),
-      ),
     );
   }
 
-  Widget _buildPlotSection() {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F1F),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE50914).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.description,
-                      color: Color(0xFFE50914),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Plot Overview',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                movie.plotOverview,
-                style: const TextStyle(
-                  color: Color(0xFFE0E0E0),
-                  fontSize: 16,
-                  height: 1.6,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _buildDetailsCard() {
+    final rows = <MapEntry<String, String>>[
+      if (movie.originalTitle != movie.title) MapEntry('Original Title', movie.originalTitle),
+      if (movie.year > 0) MapEntry('Release Year', movie.year.toString()),
+      MapEntry('Media Type', movie.type == 'tv' ? 'TV Show' : 'Movie'),
+      if (movie.originalLanguage.isNotEmpty)
+        MapEntry('Language', movie.originalLanguage.toUpperCase()),
+    ];
+    if (rows.isEmpty) return const SizedBox.shrink();
 
-  Widget _buildDetailsSection() {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F1F),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFD600).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.info_outline,
-                      color: Color(0xFFFFD600),
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Movie Details',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              _buildDetailRow('Original Title', movie.originalTitle),
-              _buildDetailRow('Release Year', movie.year.toString()),
-              _buildDetailRow('Type', movie.type.toUpperCase()),
-              _buildDetailRow('TMDb Type', movie.tmdbType),
-              _buildDetailRow(
-                'Language',
-                movie.originalLanguage.toUpperCase(),
-              ),
-              // _buildDetailRow('IMDb ID', movie.imdbId),
-            ],
-          ),
-        ),
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Details', style: AppTextStyles.headline),
+          const SizedBox(height: AppSpacing.md),
+          for (final row in rows) _buildDetailRow(row.key, row.value),
+        ],
       ),
     );
   }
 
   Widget _buildDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Color(0xFFB3B3B3),
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          SizedBox(width: 120, child: Text(label, style: AppTextStyles.subhead)),
+          Expanded(child: Text(value, style: AppTextStyles.callout)),
         ],
       ),
     );
   }
 
-  Widget _buildTrailerSection() {
-    if (movie.trailer == null)
-      return const SliverToBoxAdapter(child: SizedBox.shrink());
-
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F1F),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.05)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE50914).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.play_circle_filled,
-                      color: Color(0xFFE50914),
-                      size: 20,
-                    ),
+  Widget _buildCastTab() {
+    if (movie.cast.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0),
+        child: Text('No cast information available.', style: AppTextStyles.body),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, 0),
+      child: Column(
+        children: movie.cast.map((member) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+            child: Row(
+              children: [
+                ClipOval(
+                  child: Container(
+                    width: 52,
+                    height: 52,
+                    color: AppColors.surface,
+                    child: member.profilePath != null
+                        ? CachedNetworkImage(
+                            imageUrl: member.profilePath!,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, url, error) =>
+                                const Icon(Icons.person, color: AppColors.textTertiary),
+                          )
+                        : const Icon(Icons.person, color: AppColors.textTertiary),
                   ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Trailer',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF121212),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
                 ),
-                child: Center(
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
-                        Icons.play_circle_filled,
-                        color: Color(0xFFE50914),
-                        size: 64,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Play Trailer',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
                       Text(
-                        movie.trailer ?? '',
-                        style: const TextStyle(
-                          color: Color(0xFFB3B3B3),
-                          fontSize: 12,
-                        ),
+                        member.name,
+                        style: AppTextStyles.callout,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      if (member.character.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          member.character,
+                          style: AppTextStyles.footnote,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
 
-  Widget _buildFloatingActionButton() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFE50914).withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: FloatingActionButton.extended(
-        onPressed: () {
-          _showQuickActions();
-        },
-        backgroundColor: const Color(0xFFE50914),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        icon: const Icon(Icons.more_horiz, size: 24),
-        label: const Text(
-          'Quick Actions',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
+  Widget _buildWhereToWatchTab() {
+    final providers = movie.watchProviders;
+    final allOptions = providers == null
+        ? <WatchProviderOption>[]
+        : [...providers.flatrate, ...providers.rent, ...providers.buy];
+    final seen = <String>{};
+    final uniqueOptions = allOptions.where((o) => seen.add(o.providerName)).toList();
+
+    if (uniqueOptions.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, 0),
+        child: Text('Not currently available to stream, rent or buy.', style: AppTextStyles.body),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, 0),
+      child: Wrap(
+        spacing: AppSpacing.lg,
+        runSpacing: AppSpacing.lg,
+        children: uniqueOptions.map((option) {
+          return SizedBox(
+            width: 64,
+            child: Column(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    color: AppColors.surface,
+                    child: option.logoPath != null
+                        ? CachedNetworkImage(imageUrl: option.logoPath!, fit: BoxFit.cover)
+                        : const Icon(Icons.live_tv, color: AppColors.textTertiary, size: 22),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  option.providerName,
+                  style: AppTextStyles.footnote,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
+
+  Future<void> _openTrailer(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open trailer.'), backgroundColor: AppColors.brandRed),
+        );
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Add-to-folder sheet
+  // ---------------------------------------------------------------------
 
   void _showFolderOptions(List<FolderModel> folders) {
-
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1F1F1F),
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder:
-          (context) => DraggableScrollableSheet(
-            initialChildSize: 0.6,
-            maxChildSize: 0.9,
-            minChildSize: 0.4,
-            builder:
-                (context, scrollController) => Container(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFB3B3B3),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Add to Folders',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Expanded(
-                        child: ListView(
-                          controller: scrollController,
-                          children: [
-                            ...List.generate(folders.length,  (index) {
-                              print(folders[index].id);
-                              bool isExist = false;
-                              if(movie.folderId.isNotEmpty && movie.folderId == folders[index].id){
-                                isExist = true;
-                              } else {
-                                isExist = false;
-                              }
-                              return GestureDetector(
-                                  onTap: () async {
-                                   await widget.isarService.addMovieToFolder(folderId: folders[index].id, movie: movie);
-                                   Navigator.pop(context);
-                                   setState(() {
-
-                                   });
-                                  },
-                                  child: _buildFolderOption(folders[index].name,isExist));
-                            },),
-                            // _buildFolderOption('🍿 Weekend Watch', true),
-                            // _buildFolderOption('🚀 Sci-Fi Favorites', false),
-                            // _buildFolderOption('⭐ Must Watch Soon', false),
-                            // _buildFolderOption('🎭 Classics', false),
-                            const SizedBox(height: 20),
-                            ElevatedButton.icon(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.add),
-                              label:  Text('Create New Folder'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE50914),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        minChildSize: 0.4,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
           ),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.textTertiary,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              const Text('Add to Folders', style: AppTextStyles.title),
+              const SizedBox(height: AppSpacing.xl),
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  children: [
+                    ...List.generate(folders.length, (index) {
+                      bool isExist = movie.folderId.isNotEmpty && movie.folderId == folders[index].id;
+                      return GestureDetector(
+                        onTap: () async {
+                          HapticFeedback.mediumImpact();
+                          await widget.isarService.addMovieToFolder(
+                            folderId: folders[index].id,
+                            movie: movie,
+                          );
+                          if (context.mounted) Navigator.pop(context);
+                          setState(() {});
+                        },
+                        child: _buildFolderOption(folders[index].name, isExist),
+                      );
+                    }),
+                    const SizedBox(height: AppSpacing.md),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Create New Folder'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.brandRed,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildFolderOption(String folderName, bool isSelected) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color:
-            isSelected
-                ? const Color(0xFFE50914).withOpacity(0.1)
-                : const Color(0xFF2A2A2A),
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  folderName,
-                  style: TextStyle(
-                    color:
-                        isSelected ? const Color(0xFFE50914) : Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isSelected ? AppColors.brandRed.withOpacity(0.08) : AppColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: isSelected ? AppColors.brandRed.withOpacity(0.5) : AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              folderName,
+              style: AppTextStyles.callout.copyWith(
+                color: isSelected ? AppColors.brandRed : AppColors.textPrimary,
               ),
-              if (isSelected)
-                const Icon(Icons.check_circle, color: Color(0xFFE50914))
-              else
-                const Icon(
-                  Icons.add_circle_outline,
-                  color: Color(0xFFB3B3B3),
-                ),
-            ],
+            ),
           ),
+          Icon(
+            isSelected ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
+            color: isSelected ? AppColors.brandRed : AppColors.textTertiary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fixed-size pinned header — minExtent == maxExtent so it never resizes,
+/// fades, or parallaxes as the sheet scrolls beneath it; it simply stays put.
+class _StickyThumbnailDelegate extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Widget child;
+
+  _StickyThumbnailDelegate({required this.height, required this.child});
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => child;
+
+  @override
+  bool shouldRebuild(covariant _StickyThumbnailDelegate oldDelegate) {
+    return oldDelegate.height != height || oldDelegate.child != child;
+  }
+}
+
+/// Frosted-glass circular icon button used in the nav bar over hero imagery.
+class _NavGlassButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color? color;
+
+  const _NavGlassButton({required this.icon, required this.onPressed, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassMaterial(
+      blur: 20,
+      borderRadius: BorderRadius.circular(AppRadius.pill),
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: IconButton(
+          padding: EdgeInsets.zero,
+          onPressed: onPressed,
+          icon: Icon(icon, color: color ?? AppColors.textPrimary.withOpacity(0.9), size: 19),
         ),
       ),
     );
   }
+}
 
-  void _showQuickActions() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1F1F1F),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder:
-          (context) => Container(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Quick Actions',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                ListTile(
-                  leading: const Icon(Icons.edit, color: Color(0xFFFFD600)),
-                  title: const Text(
-                    'Edit Movie',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () => Navigator.pop(context),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.share, color: Color(0xFF00C853)),
-                  title: const Text(
-                    'Share Movie',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () => Navigator.pop(context),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text(
-                    'Remove Movie',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  onTap: () => Navigator.pop(context),
-                ),
-              ],
+/// iOS-style pill action button — filled (primary) or outlined (secondary).
+class _PillButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool filled;
+  final VoidCallback? onPressed;
+
+  const _PillButton({
+    required this.icon,
+    required this.label,
+    required this.filled,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onPressed == null;
+    return SizedBox(
+      height: 48,
+      child: filled
+          ? ElevatedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon, size: 20),
+              label: Text(label, style: AppTextStyles.callout.copyWith(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: disabled ? AppColors.surfaceRaised : AppColors.brandRed,
+                disabledBackgroundColor: AppColors.surfaceRaised,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.pill)),
+              ),
+            )
+          : OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon, size: 20, color: AppColors.textPrimary),
+              label: Text(label, style: AppTextStyles.callout),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.border),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.pill)),
+              ),
             ),
-          ),
     );
   }
 }

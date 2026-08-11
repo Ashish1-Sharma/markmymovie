@@ -328,16 +328,19 @@ class IsarService {
     return folders;
   }
 
-  Future<List<MovieModel>> getRecentlyModifiedMovies() async {
+  /// The most recently touched movies, newest first.
+  ///
+  /// Deliberately *not* windowed to the last 24h — the home screen's
+  /// "Recently Saved" rail must still show something for a user whose
+  /// library hasn't been touched today, otherwise the section silently
+  /// disappears and the screen looks broken.
+  Future<List<MovieModel>> getRecentlyModifiedMovies({int limit = 10}) async {
     final database = await db;
-    final last24Hours = DateTime.now().subtract(Duration(hours: 24));
-    
+
     final List<Map<String, dynamic>> maps = await database.query(
       'movies',
-      where: 'modifiedTime > ?',
-      whereArgs: [last24Hours.toIso8601String()],
       orderBy: 'modifiedTime DESC',
-      limit: 5,
+      limit: limit,
     );
     return maps.map(_rowToMovie).toList();
   }

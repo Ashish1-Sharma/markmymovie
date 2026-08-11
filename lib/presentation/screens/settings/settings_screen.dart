@@ -142,7 +142,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildNavigationTile(
                 icon: Icons.share_outlined,
                 title: 'Share App',
-                subtitle: 'Tell your friends about Mark My Movie',
+                subtitle: 'Tell your friends about Watchstash',
                 onTap: _shareApp,
               ),
               _buildNavigationTile(
@@ -698,22 +698,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _showPrivacyPolicy() => _showTextSheet(
     'Privacy Policy',
-    'Mark My Movie stores all data locally on your device.\n\n'
+    'Watchstash stores all data locally on your device.\n\n'
         'We do not collect, transmit, or sell any personal information. '
-        'Movie metadata is fetched from TMDB solely to display posters and '
-        'details within the app.\n\n'
+        'Movie and show metadata — including posters, cast, and streaming '
+        'availability — is fetched from TMDB (The Movie Database) to '
+        'display details within the app.\n\n'
+        'This product uses the TMDB API but is not endorsed or certified by TMDB.\n\n'
         'No analytics or tracking SDKs are included. Your watchlist is yours.',
   );
 
   void _showTermsOfService() => _showTextSheet(
     'Terms of Service',
-    'By using Mark My Movie you agree to use it for personal, '
+    'By using Watchstash you agree to use it for personal, '
         'non-commercial purposes only.\n\n'
         'The app is provided "as is" without warranties of any kind. '
         'We are not responsible for data loss — please use the backup '
         'feature regularly.\n\n'
-        'Movie data is sourced from TMDB. All trademarks belong to their '
-        'respective owners.',
+        'Movie and show data is sourced from TMDB (The Movie Database). '
+        'This product uses the TMDB API but is not endorsed or certified '
+        'by TMDB. All trademarks belong to their respective owners.',
   );
 
   void _showTextSheet(String title, String body) {
@@ -784,7 +787,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   color: Color(0xFFE50914), size: 40),
             ),
             const SizedBox(height: 16),
-            const Text('Mark My Movie',
+            const Text('Watchstash',
                 style: TextStyle(
                     color: Colors.white,
                     fontSize: 22,
@@ -796,13 +799,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     fontSize: 13)),
             const SizedBox(height: 12),
             Text(
-              'Your personal movie vault.\nMade with ❤️ for movie lovers.',
+              'Your Movie Watchlist, Stashed.\nMade with ❤️ for movie lovers.',
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: Colors.white.withOpacity(0.65), height: 1.5),
             ),
             const SizedBox(height: 8),
-            Text('© 2024 Mark My Movie',
+            Text('© 2024 Watchstash',
                 style: TextStyle(
                     color: Colors.white.withOpacity(0.4),
                     fontSize: 12)),
