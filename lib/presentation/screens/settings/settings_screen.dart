@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/logic/auth_notifier.dart';
 import 'package:markmymovie/presentation/screens/auth/login_screen.dart';
+import 'package:markmymovie/presentation/screens/profile/profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final IsarService isarService;
@@ -265,6 +266,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             IconButton(
               onPressed: _editProfile,
               icon: const Icon(Icons.edit, color: Colors.white, size: 20),
+            )
+          else
+            // Signed-in users get the full public-profile editor instead
+            // of the local display-name dialog.
+            IconButton(
+              tooltip: 'Public profile',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
+              icon: const Icon(Icons.chevron_right, color: Colors.white, size: 22),
             ),
         ],
       ),

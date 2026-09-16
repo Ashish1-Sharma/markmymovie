@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:markmymovie/core/utils/icon_utils.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/data/models/folder_model.dart';
 import 'package:markmymovie/presentation/screens/folders/folder_list_screen.dart';
@@ -538,9 +539,9 @@ class _AllFoldersScreenState extends State<AllFoldersScreen>
               MaterialPageRoute(
                 builder:
                     (context) => FolderListScreen(isarService: widget.isarService, folderName: folder.name, folderIcon: Icon(
-                  IconData(
+                  getFolderIconData(
                     folder.iconCodePoint,
-                    fontFamily: folder.iconFontFamily,
+                    folder.iconFontFamily,
                   ),
                   color: Color(folder.colorValue),
                   size: 24,
@@ -570,9 +571,9 @@ class _AllFoldersScreenState extends State<AllFoldersScreen>
                         ),
                       ),
                       child: Icon(
-                        IconData(
+                        getFolderIconData(
                           folder.iconCodePoint,
-                          fontFamily: folder.iconFontFamily,
+                          folder.iconFontFamily,
                         ),
                         color: Color(folder.colorValue),
                         size: 24,
@@ -710,9 +711,9 @@ class _AllFoldersScreenState extends State<AllFoldersScreen>
               MaterialPageRoute(
                 builder:
                     (context) => FolderListScreen(isarService: widget.isarService, folderName: folder.name, folderIcon: Icon(
-                      IconData(
+                      getFolderIconData(
                         folder.iconCodePoint,
-                        fontFamily: folder.iconFontFamily,
+                        folder.iconFontFamily,
                       ),
                       color: Color(folder.colorValue),
                       size: 24,
@@ -740,9 +741,9 @@ class _AllFoldersScreenState extends State<AllFoldersScreen>
                     ),
                   ),
                   child: Icon(
-                    IconData(
+                    getFolderIconData(
                       folder.iconCodePoint,
-                      fontFamily: folder.iconFontFamily,
+                      folder.iconFontFamily,
                     ),
                     color: Color(folder.colorValue),
                     size: 24,

@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:markmymovie/core/theme/app_theme.dart';
+import 'package:markmymovie/core/utils/icon_utils.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/data/models/folder_model.dart';
 import 'package:markmymovie/data/models/movie_model.dart';
@@ -590,7 +591,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             isarService: widget.isarService,
             folderName: folder.name,
             folderIcon: Icon(
-              IconData(folder.iconCodePoint, fontFamily: folder.iconFontFamily),
+              getFolderIconData(folder.iconCodePoint, folder.iconFontFamily),
               color: accent,
               size: 24,
             ),
@@ -616,7 +617,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
                     child: Icon(
-                      IconData(folder.iconCodePoint, fontFamily: folder.iconFontFamily),
+                      getFolderIconData(folder.iconCodePoint, folder.iconFontFamily),
                       color: accent,
                       size: 26,
                     ),

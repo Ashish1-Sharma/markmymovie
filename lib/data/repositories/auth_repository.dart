@@ -66,6 +66,10 @@ class AuthRepository {
   /// Returns the stored [UserModel] or `null` if not authenticated.
   Future<UserModel?> getStoredUser() => _storage.getUser();
 
+  /// Overwrites the cached session with a freshly-saved profile, so
+  /// edits show up across the app without another login round-trip.
+  Future<void> cacheUser(UserModel user) => _storage.saveUser(user);
+
   /// Returns `true` if a valid user session is stored locally.
   Future<bool> isLoggedIn() => _storage.hasUser();
 }

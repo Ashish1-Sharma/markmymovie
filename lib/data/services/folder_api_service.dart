@@ -150,4 +150,39 @@ class FolderApiService {
     }
     return false;
   }
+
+  /// Flips a single folder between `private`, `public` and `unlisted`.
+  ///
+  /// Uses the dedicated visibility endpoint rather than `update.php`,
+  /// which expects the full folder payload and would blank out the
+  /// fields this call doesn't know about.
+  Future<bool> updateVisibility({
+    required int userId,
+    required int folderId,
+    required String visibility,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/updateVisibility.php'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          'userId': userId,
+          'folderId': folderId,
+          'visibility': visibility,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final statusCode = body['statusCode'];
+        return statusCode == 200 || statusCode == '200';
+      }
+    } catch (e) {
+      print('[FolderApiService] Update Visibility Error: $e');
+    }
+    return false;
+  }
 }
