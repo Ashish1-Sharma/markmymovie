@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/data/models/folder_model.dart';
+import 'package:markmymovie/data/services/analytics_service.dart';
 
 class AddFolderScreen extends StatefulWidget {
   final IsarService isarService;
@@ -131,7 +132,11 @@ class _AddFolderScreenState extends State<AddFolderScreen> {
 
 
       // TODO: Save to database using widget.isarService
-await widget.isarService.saveFolder(newFolder);
+      await widget.isarService.saveFolder(newFolder);
+      AnalyticsService().logCreateFolder(
+        folderName: newFolder.name,
+        isPublic: false,
+      );
       if (mounted) {
         Navigator.pop(context, newFolder);
         ScaffoldMessenger.of(context).showSnackBar(

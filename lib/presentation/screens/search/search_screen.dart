@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/data/models/movie_card_model.dart';
 import 'package:markmymovie/presentation/screens/detail/movie_detail_screen.dart';
+import 'package:markmymovie/data/services/analytics_service.dart';
 
 import '../../../data/services/tmdb_service.dart';
 
@@ -68,6 +69,8 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _performSearch(String query) async {
     if (query.isEmpty) return;
 
+    AnalyticsService().logMovieSearch(query);
+
     setState(() {
       _isLoading = true;
       _hasSearched = true;
@@ -77,12 +80,22 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final results = await _tmdbService.searchMovies(query, widget.isarService);
       if (!mounted) return;
+      AnalyticsService().logMovieFetched(
+        searchTerm: query,
+        resultCount: results.length,
+        hasError: false,
+      );
       setState(() {
         _searchResults = results;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
+      AnalyticsService().logMovieFetched(
+        searchTerm: query,
+        resultCount: 0,
+        hasError: true,
+      );
       setState(() {
         _searchResults.clear();
         _isLoading = false;
@@ -251,6 +264,12 @@ class MovieCard extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         searchFocusNode.unfocus();
+        AnalyticsService().logMovieClick(
+          movieId: movie.tmdbId,
+          movieTitle: movie.title,
+          mediaType: movie.mediaType,
+          source: 'search',
+        );
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => MovieDetailScreen(

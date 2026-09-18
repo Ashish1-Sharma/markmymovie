@@ -8,6 +8,7 @@ import 'package:markmymovie/data/models/folder_model.dart';
 import 'package:markmymovie/data/models/movie_model.dart';
 import 'package:markmymovie/data/models/watch_provider_model.dart';
 import 'package:markmymovie/data/services/tmdb_service.dart';
+import 'package:markmymovie/data/services/analytics_service.dart';
 
 class MovieDetailScreen extends StatefulWidget {
   final IsarService isarService;
@@ -191,11 +192,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                   color: _isWatched ? AppColors.success : null,
                   onPressed: () async {
                     HapticFeedback.mediumImpact();
-                    movie.isWatch = !_isWatched;
+                    final nextWatchedState = !_isWatched;
+                    movie.isWatch = nextWatchedState;
                     if (movie.folderId.isNotEmpty) {
                       await widget.isarService.saveMovie(movie);
                     }
-                    setState(() => _isWatched = !_isWatched);
+                    AnalyticsService().logMarkAsWatched(
+                      movieId: movie.imdbId.isNotEmpty ? movie.imdbId : (widget.movieId ?? ''),
+                      movieTitle: movie.title,
+                      isWatched: nextWatchedState,
+                    );
+                    setState(() => _isWatched = nextWatchedState);
                   },
                 ),
                 const SizedBox(width: 8),
@@ -604,6 +611,10 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   Future<void> _openTrailer(String url) async {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
+    AnalyticsService().logWatchTrailer(
+      movieId: movie.imdbId.isNotEmpty ? movie.imdbId : (widget.movieId ?? ''),
+      movieTitle: movie.title,
+    );
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -657,6 +668,12 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                           await widget.isarService.addMovieToFolder(
                             folderId: folders[index].id,
                             movie: movie,
+                          );
+                          AnalyticsService().logAddToFolder(
+                            movieId: movie.imdbId.isNotEmpty ? movie.imdbId : (widget.movieId ?? ''),
+                            movieTitle: movie.title,
+                            folderId: folders[index].id,
+                            folderName: folders[index].name,
                           );
                           if (context.mounted) Navigator.pop(context);
                           setState(() {});

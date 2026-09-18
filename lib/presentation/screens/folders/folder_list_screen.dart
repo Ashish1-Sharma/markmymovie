@@ -4,6 +4,7 @@ import 'package:markmymovie/data/models/movie_model.dart';
 import 'package:markmymovie/presentation/screens/detail/movie_detail_screen.dart';
 import 'package:markmymovie/presentation/screens/search/search_screen.dart';
 import 'package:markmymovie/presentation/widgets/custom_alerts.dart';
+import 'package:markmymovie/data/services/analytics_service.dart';
 
 class FolderListScreen extends StatefulWidget {
   final IsarService isarService;
@@ -354,6 +355,12 @@ class _FolderListScreenState extends State<FolderListScreen>
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
+            AnalyticsService().logMovieClick(
+              movieId: movie.imdbId,
+              movieTitle: movie.title,
+              mediaType: movie.type,
+              source: 'folder',
+            );
             // Navigate to movie detail
             Navigator.of(context).push(MaterialPageRoute(builder: (context) => MovieDetailScreen(isarService: widget.isarService, movieModel: movie,),)).then((value) async {
               await _loadMovies();
@@ -600,6 +607,11 @@ class _FolderListScreenState extends State<FolderListScreen>
                 // Toggle watched status
                 movie.isWatch = !movie.isWatch;
                 await widget.isarService.saveMovie(movie);
+                AnalyticsService().logMarkAsWatched(
+                  movieId: movie.imdbId,
+                  movieTitle: movie.title,
+                  isWatched: movie.isWatch,
+                );
                 setState(() {
 
                 });

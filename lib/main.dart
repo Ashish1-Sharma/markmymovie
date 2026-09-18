@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:markmymovie/firebase_options.dart';
 import 'package:markmymovie/data/local_db/isar_service.dart';
 import 'package:markmymovie/presentation/screens/home/home_screen.dart';
 import 'package:markmymovie/logic/auth_notifier.dart';
 import 'package:markmymovie/presentation/screens/auth/login_screen.dart';
 import 'package:markmymovie/presentation/screens/splash/watchstash_gif_splash_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(MyApp());
 }
 

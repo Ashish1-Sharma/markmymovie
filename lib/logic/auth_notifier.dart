@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:markmymovie/data/models/user_model.dart';
 import 'package:markmymovie/data/repositories/auth_repository.dart';
 import 'package:markmymovie/data/services/auth_service.dart';
+import 'package:markmymovie/data/services/analytics_service.dart';
 
 /// Authentication status enum.
 enum AuthStatus {
@@ -75,6 +76,7 @@ class AuthNotifier extends ChangeNotifier {
       final user = await _repo.loginWithGoogle();
       _user = user;
       _setStatus(AuthStatus.authenticated);
+      AnalyticsService().logLogin(method: 'google');
       return true;
     } on AuthException catch (e) {
       _errorMessage = e.userMessage;
@@ -93,6 +95,7 @@ class AuthNotifier extends ChangeNotifier {
   Future<void> logout() async {
     try {
       await _repo.logout();
+      AnalyticsService().logLogout();
     } catch (_) {
       // Best-effort logout
     } finally {
